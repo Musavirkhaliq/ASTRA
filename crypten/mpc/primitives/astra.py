@@ -399,16 +399,83 @@ class AstraSharedTensor(object):
     def revealastra(self, dst=None):
         tensor = self.share.clone()
         process_num = self.rank
+        """
+        # Parties p0 and p1 come together
         if process_num == 0:
+            #sending lamda_v2 to 1
             req0 = comm.get().isend(tensor[1], dst=1)
             req0.wait()
+            #recieving mv from 1
             missing_value =torch.zeros_like(tensor[0])
             req1 = comm.get().irecv(missing_value, src=1)
             req1.wait()
+            return missing_value-tensor[0]-tensor[1]
+        elif process_num == 1:
+            # recieving lamda_v2 from 0
+            missing_value =torch.zeros_like(tensor[0])
+            req3 = comm.get().irecv(missing_value, src=0)
+            req3.wait()
+            # sending mv to 0
+            req2 = comm.get().isend(tensor[1], dst=0)
+            req2.wait()
+            return tensor[1]-tensor[0]-missing_value
+        
+        # Parties p0 and p2 come together
+        if process_num == 0:
+            #sending lamda_v1 to 2
+            req0 = comm.get().isend(tensor[0], dst=2)
+            req0.wait()
+            #recieving mv from 2
+            missing_value =torch.zeros_like(tensor[0])
+            req1 = comm.get().irecv(missing_value, src=2)
+            req1.wait()
+            return missing_value-tensor[0]-tensor[1]
+        elif process_num == 2:
+            # recieving lamda_v1 from 0
+            missing_value =torch.zeros_like(tensor[0])
+            req3 = comm.get().irecv(missing_value, src=0)
+            req3.wait()
+            # sending mv to 0
+            req2 = comm.get().isend(tensor[1], dst=0)
+            req2.wait()
+            return tensor[1]-tensor[0]-missing_value
+        # Parties p1 and p2 come together
+        
+        if process_num == 1:
+            #sending lamda_v1 to 2
+            req0 = comm.get().isend(tensor[0], dst=2)
+            req0.wait()
+            #recieving lamda_v2 from 2
+            missing_value =torch.zeros_like(tensor[0])
+            req1 = comm.get().irecv(missing_value, src=2)
+            req1.wait()
+            return tensor[1]-tensor[0]-missing_value
+        elif process_num == 2:
+            # recieving lamda_v1 from 1
+            missing_value =torch.zeros_like(tensor[0])
+            req3 = comm.get().irecv(missing_value, src=1)
+            req3.wait()
+            # sending lamda_v2 from 2
+            req2 = comm.get().isend(tensor[0], dst=1)
+            req2.wait()
+            return tensor[1]-tensor[0]-missing_value
+
+        """
+        # If all process come together
+        if process_num == 0:
+            #sending lamda_v2 to 1
+            req0 = comm.get().isend(tensor[1], dst=1)
+            req0.wait()
+            #recieving mv from 1
+            missing_value =torch.zeros_like(tensor[0])
+            req1 = comm.get().irecv(missing_value, src=1)
+            req1.wait()
+            #sending lamda_v1 to 2
             req00 = comm.get().isend(tensor[0], dst=2)
             req00.wait()
             return missing_value-tensor[0]-tensor[1]
         elif process_num == 1:
+            
             missing_value =torch.zeros_like(tensor[0])
             req3 = comm.get().irecv(missing_value, src=0)
             req3.wait()
@@ -420,7 +487,7 @@ class AstraSharedTensor(object):
             req4 = comm.get().irecv(missing_value, src=0)
             req4.wait()
             return tensor[1]-tensor[0]-missing_value
-
+    
 
     def get_plain_text(self, dst=None):
         """Decrypts the tensor."""
