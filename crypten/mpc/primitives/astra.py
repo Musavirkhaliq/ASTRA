@@ -20,7 +20,7 @@ from crypten.encoder import FixedPointEncoder
 # import torch.distributed as dist
 
 from . import beaver, replicated  # noqa: F401
-
+from . import sharingastra
 
 SENTINEL = -1
 
@@ -62,7 +62,7 @@ class AstraSharedTensor(object):
         The parties can also set the `precision` and `device` for their share of
         the tensor. If `device` is unspecified, it is set to `tensor.device`.
         """
-
+        self.rep_share = None
         # do nothing if source is sentinel:
         if src == SENTINEL:
             return
@@ -104,7 +104,7 @@ class AstraSharedTensor(object):
         # self.share = AstraSharedTensor.astrashares(size, device=device).share
         process_num = self.rank
         # if source is zero 
-    
+        
         if src == 0:
             if process_num == 0:
                 lambda_v1 = seeds[1]  #seeds[1]  #next_share
@@ -115,37 +115,33 @@ class AstraSharedTensor(object):
                 req0.wait()
                 req00 = comm.get().isend(mv, dst = 2)
                 req00.wait()
-                # req0.wait()
-                # req1.wait()
-                # dist.send(tensor=mv, dst=1)
-                # dist.send(tensor=mv, dst=2)
+                
                 # send to 1 and 2 
+                # print(torch.stack([lambda_v1, lambda_v2]))
                 self.share = torch.stack([lambda_v1, lambda_v2])
-                # return 
-                # print("lamdba_v1= ", lambda_v1)
-                # print("lamdba_v2= ", lambda_v2)
+                
             if process_num == 1:
                 lambda_v1 = seeds[0] #current_share
                 mv = torch.zeros_like(lambda_v1)
+
                 #recieve mv from 0 
-                # dist.recv(tensor=mv, src=0)
                 req1 = comm.get().irecv(mv, src=0)
                 req1.wait()
+                # print(torch.stack([lambda_v1, mv]))
+
                 self.share = torch.stack([lambda_v1, mv])
-                # print("lamdba_v1= ", lambda_v1) 
-                # print("mv= ", mv)
+             
             if process_num == 2:
                 lambda_v2 = seeds[1]  #next_share
                 #recieve mv from 0
                 mv = torch.zeros_like(lambda_v2)   
                 req2= comm.get().irecv(mv, src=0)
                 req2.wait()
+
                 # dist.recv(tensor=mv, src=0) 
+                # print(torch.stack([lambda_v2, mv]))
                 self.share = torch.stack([lambda_v2,mv])
 
-
-                # print("lamdba_v2= ", lambda_v2)
-                # print("mv= ", mv)
         elif src == 1:
             if process_num == 0:
                 lambda_v1 = seeds[1]  #next_share
@@ -269,6 +265,29 @@ class AstraSharedTensor(object):
         next_share = generate_random_ring_element(*size, generator=g1, device=device)
         global_share = generate_random_ring_element(*size, generator=g2, device=device)
         tensor.share = torch.stack([current_share, next_share, global_share])
+        return tensor
+
+    @staticmethod
+    def PRZS(*size, device=None):
+        """
+        Generate a Pseudo-random Sharing of Zero (using arithmetic shares)
+
+        This function does so by generating `n` numbers across `n` parties with
+        each number being held by exactly 2 parties. One of these parties adds
+        this number while the other subtracts this number.
+        """
+        from crypten import generators
+
+        tensor = AstraSharedTensor(src=SENTINEL)
+        if device is None:
+            device = torch.device("cpu")
+        elif isinstance(device, str):
+            device = torch.device(device)
+        g0 = generators["prev"][device]
+        g1 = generators["next"][device]
+        current_share = generate_random_ring_element(*size, generator=g0, device=device)
+        next_share = generate_random_ring_element(*size, generator=g1, device=device)
+        tensor.share = current_share - next_share
         return tensor
 
     @staticmethod
@@ -397,8 +416,13 @@ class AstraSharedTensor(object):
             return comm.get().reduce(tensor, dst)
         
     def revealastra(self,dst=None):
+        """For process 0 tensor[0] is lambda_v1 and tensor[1] is lambdav2 and missing value is mv
+           For process 1 tensor[0] is lambda_v1 and tensor[1] is mv and missing value is lambda_v2
+           For process 2 tensor[0] is lambda_v2 and tensor[1] is mv and missing value is lambda_v1"""
         tensor = self.share.clone()
+        
         process_num = self.rank
+        
         
         # Parties p0 and p1 come together
         if dst == '01' or dst == '10':
@@ -496,9 +520,9 @@ class AstraSharedTensor(object):
     def get_plain_text(self,dst=None):
         """Decrypts the tensor."""
         # Edge case where share becomes 0 sized (e.g. result of split)
-        print("inside get_plain_text")
         if self.nelement() < 1:
             return torch.empty(self.share.size())
+        
         return self.encoder.decode(self.revealastra(dst=dst))
 
     def encode_(self, new_encoder):
@@ -556,8 +580,10 @@ class AstraSharedTensor(object):
             if additive_func:  # ['add', 'sub']
                 if result.rank == 0:
                     result.share = getattr(result.share, op)(y)
+                
                 else:
                     result.share = torch.broadcast_tensors(result.share, y)[0]
+                
             elif op == "mul_":  # ['mul_']
                 result.share = result.share.mul_(y)
             else:  # ['mul', 'matmul', 'convNd', 'conv_transposeNd']
@@ -570,28 +596,37 @@ class AstraSharedTensor(object):
                 elif self.encoder.scale < y.encoder.scale:
                     result.encode_as_(y)
                 result.share = getattr(result.share, op)(y.share)
+                
             else:  # ['mul', 'matmul', 'convNd', 'conv_transposeNd']
-                protocol = globals()[cfg.mpc.protocol]
-                result.share.set_(
-                    getattr(protocol, op)(result, y, *args, **kwargs).share.data
-                )
-        else:
-            raise TypeError("Cannot %s %s with %s" % (op, type(y), type(self)))
-
-        # Scale by encoder scale if necessary
-        if not additive_func:
-            if public:  # scale by self.encoder.scale
-                if self.encoder.scale > 1:
-                    return result.div_(result.encoder.scale)
-                else:
-                    result.encoder = self.encoder
-            else:  # scale by larger of self.encoder.scale and y.encoder.scale
-                if self.encoder.scale > 1 and y.encoder.scale > 1:
-                    return result.div_(result.encoder.scale)
-                elif self.encoder.scale > 1:
-                    result.encoder = self.encoder
-                else:
-                    result.encoder = y.encoder
+                # protocol = globals()[cfg.mpc.protocol]
+                assert comm.get().get_world_size() == 3
+                result.share = getattr(sharingastra, op)(result, y, *args, **kwargs)
+                # result.share.set_(
+                #     getattr(sharingastra, op)(result, y, *args, **kwargs)
+                # )
+                # result.share.set_(
+                #     getattr(protocol, op)(result, y, *args, **kwargs).share.data
+                # )
+        # else:
+        #     raise TypeError("Cannot %s %s with %s" % (op, type(y), type(self)))
+        """You need to check what is this for"""
+        # # Scale by encoder scale if necessary
+        # if not additive_func:
+        #     if public:  # scale by self.encoder.scale
+        #         if self.encoder.scale > 1:
+        #             # if comm.get().get_world_size() == 3:
+        #             #     result.share.set_(sharingastra.truncation(result, result.encoder.scale).share.data)
+        #             #     return result
+        #             return result.div_(result.encoder.scale)
+        #         else:
+        #             result.encoder = self.encoder
+        #     else:  # scale by larger of self.encoder.scale and y.encoder.scale
+        #         if self.encoder.scale > 1 and y.encoder.scale > 1:
+        #             return result.div_(result.encoder.scale)
+        #         elif self.encoder.scale > 1:
+        #             result.encoder = self.encoder
+        #         else:
+        #             result.encoder = y.encoder
 
         return result
 

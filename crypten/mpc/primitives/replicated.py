@@ -55,16 +55,19 @@ def __replicated_secret_sharing_protocol(op, x, y, *args, **kwargs):
         "conv_transpose1d",
         "conv_transpose2d",
     }
-    x_shares, y_shares = replicate_shares([x.share, y.share])
-    x1, x2 = x_shares
-    y1, y2 = y_shares
+    print(x.shares)
+    print(y.shares)
+    pass
+    # # x_shares, y_shares = replicate_shares([x.share, y.share])
+    # # x1, x2 = x_shares
+    # # y1, y2 = y_shares
 
-    z = x.shallow_copy()
-    z.share = getattr(torch, op)(x1, y1, *args, **kwargs)
-    z.share += getattr(torch, op)(x1, y2, *args, **kwargs)
-    z.share += getattr(torch, op)(x2, y1, *args, **kwargs)
+    # z = x.shallow_copy()
+    # z.share = getattr(torch, op)(x1, y1, *args, **kwargs)
+    # z.share += getattr(torch, op)(x1, y2, *args, **kwargs)
+    # z.share += getattr(torch, op)(x2, y1, *args, **kwargs)
 
-    return z
+    # return z
 
 
 def mul(x, y):

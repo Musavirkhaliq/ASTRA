@@ -23,7 +23,6 @@ from . import beaver, replicated  # noqa: F401
 
 SENTINEL = -1
 
-
 # MPC tensor where shares additive-sharings.
 class ArithmeticSharedTensor(object):
     """
