@@ -154,7 +154,8 @@ def square(x):
 
 
 def truncation(x, y):
-    
+    # print(x.share//y)
+    # z=x.clone()
     rank = x.rank
     scale = y
     #scale = x.encoder.scale
@@ -184,7 +185,7 @@ def truncation(x, y):
             x.share[0] //= scale
     # Party 2 locally computes x2 := (x2 +x3)/scale-r, and sends this to party 1.
     if rank == 2:
-        x.share[0] = (x.share[0] + x.share[1]) // scale - r
+        x.share[0] = (x.share[0] - x.share[1]) // scale + r
         req0 = comm.get().isend(x.share[0], dst=0)
         req0.wait()
     #Party 3,2 locally compute x3 := r. ie. mx
