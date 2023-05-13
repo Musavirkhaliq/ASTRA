@@ -610,23 +610,26 @@ class AstraSharedTensor(object):
         # else:
         #     raise TypeError("Cannot %s %s with %s" % (op, type(y), type(self)))
         """You need to check what is this for"""
-        # # Scale by encoder scale if necessary
-        # if not additive_func:
-        #     if public:  # scale by self.encoder.scale
-        #         if self.encoder.scale > 1:
-        #             # if comm.get().get_world_size() == 3:
-        #             #     result.share.set_(sharingastra.truncation(result, result.encoder.scale).share.data)
-        #             #     return result
-        #             return result.div_(result.encoder.scale)
-        #         else:
-        #             result.encoder = self.encoder
-        #     else:  # scale by larger of self.encoder.scale and y.encoder.scale
-        #         if self.encoder.scale > 1 and y.encoder.scale > 1:
-        #             return result.div_(result.encoder.scale)
-        #         elif self.encoder.scale > 1:
-        #             result.encoder = self.encoder
-        #         else:
-        #             result.encoder = y.encoder
+        # Scale by encoder scale if necessary
+        if not additive_func:
+            if public:  # scale by self.encoder.scale
+                if self.encoder.scale > 1:
+                    if comm.get().get_world_size() == 3:
+                        result.share.set_(sharingastra.truncation(result, result.encoder.scale).share.data)
+                        return result
+                    return result.div_(result.encoder.scale)
+                else:
+                    result.encoder = self.encoder
+            else:  # scale by larger of self.encoder.scale and y.encoder.scale
+                if self.encoder.scale > 1 and y.encoder.scale > 1:
+                    if comm.get().get_world_size() == 3:
+                        result.share.set_(sharingastra.truncation(result, result.encoder.scale).share.data)
+                        return result
+                    return result.div_(result.encoder.scale)
+                elif self.encoder.scale > 1:
+                    result.encoder = self.encoder
+                else:
+                    result.encoder = y.encoder
 
         return result
 
@@ -686,7 +689,7 @@ class AstraSharedTensor(object):
                 tensor = self.get_plain_text()
 
             # Truncate protocol for dividing by public integers:
-            if comm.get().get_world_size() > 2:
+            if comm.get().get_world_size() == 0:
                 protocol = globals()[cfg.mpc.protocol]
                 protocol.truncate(self, y)
             else:

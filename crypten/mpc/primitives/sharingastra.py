@@ -154,34 +154,43 @@ def square(x):
 
 
 def truncation(x, y):
+    
     rank = x.rank
     scale = y
     #scale = x.encoder.scale
+    from .astra import AstraSharedTensor
 
-    rep_share = replicate_shares(x.share)
+    seeds = AstraSharedTensor.astrashares(x.share[0].size(), device=x.device).share
+
+
+    # rep_share = replicate_shares(x.share)
     
     r = None
+    #p0 = 1 , p1 = 3 , p2 = 2
     # Step 1: Parties 2,3 locally compute a random r in Z_2^k .
-    if rank == 1 or rank == 0:
+    if rank == 1 or rank == 2:
         if rank == 1:
-            r = generate_random_ring_element(x.share.size(), device=x.device, generator=comm.get().get_generator(1, device=x.device))
-        if rank == 0:
-            r = generate_random_ring_element(x.share.size(), device=x.device, generator=comm.get().get_generator(0, device=x.device))
+            r = seeds[1]
+        if rank == 2:
+            r = seeds[0]
         
     # Step 2: Party 1,3 locally compute x1 := x/2^d
-    if rank == 0 or rank == 2:
-        if rank == 2:
-            x.share //= scale
+    if rank == 0 or rank == 1:
         if rank == 0:
-            rep_share //= scale
-    # Party 2 locally computes x2 := (x
-    if rank == 1:
-        x.share = (x.share + rep_share) // scale - r
-
-    if rank == 1 or rank == 0:
-        if rank == 0:
-            x.share = r
-
+            x.share[0] //= scale
+            req1 = comm.get().irecv(x.share[1], src=2)
+            req1.wait()
+        if rank == 1:
+            x.share[0] //= scale
+    # Party 2 locally computes x2 := (x2 +x3)/scale-r, and sends this to party 1.
+    if rank == 2:
+        x.share[0] = (x.share[0] + x.share[1]) // scale - r
+        req0 = comm.get().isend(x.share[0], dst=0)
+        req0.wait()
+    #Party 3,2 locally compute x3 := r. ie. mx
+    if rank == 1 or rank == 2:
+        x.share[1] = r
+    # print(x.share)
     return x
 
 
