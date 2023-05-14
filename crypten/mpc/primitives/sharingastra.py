@@ -53,15 +53,24 @@ def __replicated_secret_sharing_protocol(op, x, y, *args, **kwargs):
     # print("x share", x,y)
     # print(rank)
     # # below function returns current, next, global seeds.
-    seeds = AstraSharedTensor.astrashares(x[0].size(), device=x.device).share
-    # print(seeds)
+
+    """This is to get the size of generated random value to get operations done correctly"""
+    size = getattr(torch, op)(x[0], y[1], *args, **kwargs).size()
+    # print(size)
+    
+
+    seeds = AstraSharedTensor.astrashares(size, device=x.device).share
+
     if rank == 0:
+        
         lambda_z1 = seeds[1]
         lambda_z2 = seeds[0]
         gamma_xy1 = seeds[2]
         lambdax = x[0]+x[1]
         lambday = y[0]+y[1]
         gamma_xy = getattr(torch, op)(lambdax, lambday, *args, **kwargs)
+        # print("lambdax shape", gamma_xy.shape)
+        
         gamma_xy2 = gamma_xy - gamma_xy1
         req0 = comm.get().isend(gamma_xy2, dst=2)
         req0.wait()
@@ -72,29 +81,32 @@ def __replicated_secret_sharing_protocol(op, x, y, *args, **kwargs):
         lambda_z1 = seeds[0]
         gamma_xy1 = seeds[2]
         mz1 = - getattr(torch, op)(x[1], y[0], *args, **kwargs) \
-            - getattr(torch, op)(y[1], x[0], *args, **kwargs) + lambda_z1 + gamma_xy1
-        mz1 = - x[1] * y[0] - y[1] * x[0] + lambda_z1 + gamma_xy1
-        mz2 = torch.zeros_like(x[0])
+            - getattr(torch, op)(x[0], y[1],*args, **kwargs) + lambda_z1 + gamma_xy1
+        # print("mz1",mz1.shape)
+        # mz1 = - x[1] * y[0] - y[1] * x[0] + lambda_z1 + gamma_xy1
+        mz2 = torch.zeros_like(mz1)
         req4 = comm.get().irecv(mz2, src=2)
         req4.wait()
         mz = mz1 + mz2
         req5 = comm.get().isend(mz1, dst=2)
         req5.wait()
+        
         # print(torch.stack([torch.ones_like(lambda_z1),lambda_z1,mz]))
         return torch.stack([lambda_z1,mz])
     if rank == 2:
         lambda_z2 = seeds[1]
-        gamma_xy2 = torch.zeros_like(x[0])
+        gamma_xy2 = torch.zeros_like(lambda_z2)
         req1 = comm.get().irecv(gamma_xy2, src=0)
         req1.wait()
         mz2 = getattr(torch, op)(x[1], y[1], *args, **kwargs) - getattr(torch, op)(x[1], y[0], *args, **kwargs) \
-            - getattr(torch, op)(y[1], x[0], *args, **kwargs) + lambda_z2 + gamma_xy2
+            - getattr(torch, op)(x[0], y[1], *args, **kwargs) + lambda_z2 + gamma_xy2
         req2 = comm.get().isend(mz2, dst=1)
         req2.wait()
-        mz1 = torch.zeros_like(x[0])
+        mz1 = torch.zeros_like(mz2)
         req3 = comm.get().irecv(mz1, src=1)
         req3.wait()
         mz = mz1 + mz2
+        
         # print(torch.stack([lambda_z2,mz]))
         return torch.stack([lambda_z2,mz])
 
@@ -160,7 +172,7 @@ def truncation(x, y):
     scale = y
     #scale = x.encoder.scale
     from .astra import AstraSharedTensor
-
+    
     seeds = AstraSharedTensor.astrashares(x.share[0].size(), device=x.device).share
 
 

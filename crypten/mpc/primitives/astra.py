@@ -600,7 +600,8 @@ class AstraSharedTensor(object):
             else:  # ['mul', 'matmul', 'convNd', 'conv_transposeNd']
                 # protocol = globals()[cfg.mpc.protocol]
                 assert comm.get().get_world_size() == 3
-                result.share = getattr(sharingastra, op)(result, y, *args, **kwargs)
+                # print("hi",result.shape)
+                result.share.set_(getattr(sharingastra, op)(result, y, *args, **kwargs))
                 # result.share.set_(
                 #     getattr(sharingastra, op)(result, y, *args, **kwargs)
                 # )
