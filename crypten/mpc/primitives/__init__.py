@@ -8,5 +8,6 @@
 from .arithmetic import ArithmeticSharedTensor
 from .binary import BinarySharedTensor
 from .astra import AstraSharedTensor
+from .astraB import AstraBsharedTensor
 
-__all__ = ["ArithmeticSharedTensor", "BinarySharedTensor","AstraSharedTensor"]
+__all__ = ["ArithmeticSharedTensor", "BinarySharedTensor","AstraSharedTensor","AstraBsharedTensor"]

@@ -7,7 +7,7 @@
 
 from enum import Enum
 
-from .primitives import ArithmeticSharedTensor, BinarySharedTensor, AstraSharedTensor
+from .primitives import ArithmeticSharedTensor, BinarySharedTensor, AstraSharedTensor , AstraBsharedTensor
 
 
 class ptype(Enum):
@@ -16,6 +16,7 @@ class ptype(Enum):
     arithmetic = 0
     binary = 1
     astra = 2
+    astraB = 3
 
     def to_tensor(self):
         if self.value == 0:
@@ -24,5 +25,7 @@ class ptype(Enum):
             return BinarySharedTensor
         elif self.value == 2:
             return AstraSharedTensor
+        elif self.value == 3:
+            return AstraBsharedTensor
         else:
             raise ValueError("Cannot convert %s to encrypted tensor" % (self.name))
