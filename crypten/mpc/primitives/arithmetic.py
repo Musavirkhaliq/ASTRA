@@ -444,6 +444,7 @@ class ArithmeticSharedTensor(object):
 
     def div_(self, y):
         """Divide two tensors element-wise"""
+        print("hi")
         # TODO: Add test coverage for this code path (next 4 lines)
         if isinstance(y, float) and int(y) == y:
             y = int(y)

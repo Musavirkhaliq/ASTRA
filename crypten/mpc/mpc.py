@@ -232,6 +232,7 @@ class MPCTensor(CrypTensor):
     # Comparators
     def _ltz(self):
         """Returns 1 for elements that are < 0 and 0 otherwise"""
+        """Change me"""
         shift = torch.iinfo(torch.long).bits - 1
         precision = 0 if self.encoder.scale == 1 else None
 

@@ -104,7 +104,6 @@ class AstraSharedTensor(object):
         # self.share = AstraSharedTensor.astrashares(size, device=device).share
         process_num = self.rank
         # if source is zero 
-        
         if src == 0:
             if process_num == 0:
                 lambda_v1 = seeds[1]  #seeds[1]  #next_share
@@ -151,8 +150,11 @@ class AstraSharedTensor(object):
                 # print("lamdba_v2= ", lambda_v2)
             if process_num == 1:
                 lambda_v1 = seeds[0] #current_share
+                #lambda_v2 = seeds[2] 
                 mv = tensor + lambda_v1 + seeds[2]  #same_share
                 #send mv to 2
+                req0 = comm.get().isend(mv, dst = 2)
+                
                 self.share = torch.stack([lambda_v1, mv])
                 # print("lamdba_v1= ", lambda_v1) 
                 # print("mv= ", mv)
@@ -160,6 +162,8 @@ class AstraSharedTensor(object):
                 lambda_v2 = seeds[2]  #same_share
                 mv = torch.zeros_like(lambda_v2)
                 #recieve mv from 1
+                req1 = comm.get().irecv(mv, src=1)
+                req1.wait()
                 self.share = torch.stack([lambda_v2, mv])
                 # print("lamdba_v2= ", lambda_v2)
                 # print("mv= ", mv)
@@ -174,6 +178,10 @@ class AstraSharedTensor(object):
                 lambda_v1 = seeds[2]  #same_share
                 mv = torch.zeros_like(lambda_v1)
                 #recive mv from 2
+                req1 = comm.get().irecv(mv, src=2)
+                req1.wait()
+
+
                 self.share = torch.stack([lambda_v1, mv])
                 # print("lamdba_v1= ", lambda_v1) 
                 # print("mv= ", mv)
@@ -181,6 +189,7 @@ class AstraSharedTensor(object):
                 lambda_v2 = seeds[1]  #next_share
                 mv = tensor + lambda_v2 + seeds[2]  #same_share
                 #send mv to 1
+                req1 = comm.get().isend(mv, dst=1)
                 self.share = torch.stack([lambda_v2, mv])
                 # print("lamdba_v2= ", lambda_v2)
                 # print("mv= ", mv)
@@ -666,6 +675,7 @@ class AstraSharedTensor(object):
         return self._arithmetic_function_(y, "mul")
 
     def div(self, y):
+        print("hello")
         """Divide by a given tensor"""
         result = self.clone()
         if isinstance(y, CrypTensor):
@@ -675,6 +685,7 @@ class AstraSharedTensor(object):
         return result.div_(y)
 
     def div_(self, y):
+    
         """Divide two tensors element-wise"""
         # TODO: Add test coverage for this code path (next 4 lines)
         if isinstance(y, float) and int(y) == y:
@@ -694,7 +705,9 @@ class AstraSharedTensor(object):
                 protocol = globals()[cfg.mpc.protocol]
                 protocol.truncate(self, y)
             else:
-                self.share = self.share.div_(y, rounding_mode="trunc")
+                print("hello")
+                self.share = sharingastra.truncation(self, y).share.data
+                # self.share = self.share.div_(y, rounding_mode="trunc")
 
             # Validate
             if validate:
@@ -876,6 +889,13 @@ class AstraSharedTensor(object):
         result = self.clone()
         return result.scatter_(dim, index, src)
 
+
+
+    "relational operators are implemented from here"
+    def gt(self, y):
+        print("hello")
+        # return circuit.eq(self, y) 
+
     # overload operators:
     __add__ = add
     __iadd__ = add_
@@ -889,6 +909,27 @@ class AstraSharedTensor(object):
     __truediv__ = div
     __itruediv__ = div_
     __neg__ = neg
+
+    # Bitwise operators
+    __add__ = add
+    # __eq__ = eq
+    # __ne__ = ne
+    # __lt__ = lt
+    # __le__ = le
+    __gt__ = gt
+    # __ge__ = ge
+    # __lshift__ = lshift
+    # __rshift__ = rshift
+
+    # # In-place bitwise operators
+    # __ilshift__ = lshift_
+    # __irshift__ = rshift_
+
+    # # Reversed boolean operations
+    # __radd__ = __add__
+    # __rxor__ = __xor__
+    # __rand__ = __and__
+    # __ror__ = __or__
 
     def __rsub__(self, tensor):
         """Subtracts self from tensor."""

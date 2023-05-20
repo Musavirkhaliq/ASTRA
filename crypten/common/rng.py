@@ -50,6 +50,6 @@ def generate_kbit_random_tensor(size, bitlength=None, generator=None, **kwargs):
         return CUDALongTensor(rand_tensor)
     return rand_tensor
 
-a = generate_kbit_random_tensor((1,1),32)
-print(a.shape)
+# a = generate_kbit_random_tensor((1,1),32)
+# print(a.shape)
 

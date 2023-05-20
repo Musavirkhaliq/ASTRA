@@ -37,6 +37,7 @@ def ge(self, y):
 
 def gt(self, y):
     """Returns self > y"""
+    print("gt")
     return (-self + y)._ltz()
 
 

@@ -101,7 +101,11 @@ class AstraBSharedTensor(object):
             size = comm.get().broadcast_obj(size, src)
 
         # generate pseudo-random zero sharing (astrashares) and add source's tensor:
+
+        
         seeds = AstraBSharedTensor.astrashares(size, device=device).share
+
+       
         # self.share = AstraBSharedTensor.astrashares(size, device=device).share
         process_num = self.rank
         # if source is zero 
@@ -110,7 +114,7 @@ class AstraBSharedTensor(object):
             if process_num == 0:
                 lambda_v1 = seeds[1]  #seeds[1]  #next_share
                 lambda_v2 = seeds[0] #current_share
-                mv = tensor + lambda_v1 + lambda_v2
+                mv = tensor ^ lambda_v1 ^ lambda_v2
 
                 req0 = comm.get().isend(mv, dst = 1)
                 req0.wait()
@@ -152,8 +156,11 @@ class AstraBSharedTensor(object):
                 # print("lamdba_v2= ", lambda_v2)
             if process_num == 1:
                 lambda_v1 = seeds[0] #current_share
-                mv = tensor + lambda_v1 + seeds[2]  #same_share
+                #lambda_v2 = seeds[2] 
+                mv = tensor ^ lambda_v1 ^ seeds[2]  #same_share
                 #send mv to 2
+                req0 = comm.get().isend(mv, dst = 2)
+                
                 self.share = torch.stack([lambda_v1, mv])
                 # print("lamdba_v1= ", lambda_v1) 
                 # print("mv= ", mv)
@@ -161,6 +168,8 @@ class AstraBSharedTensor(object):
                 lambda_v2 = seeds[2]  #same_share
                 mv = torch.zeros_like(lambda_v2)
                 #recieve mv from 1
+                req1 = comm.get().irecv(mv, src=1)
+                req1.wait()
                 self.share = torch.stack([lambda_v2, mv])
                 # print("lamdba_v2= ", lambda_v2)
                 # print("mv= ", mv)
@@ -175,13 +184,18 @@ class AstraBSharedTensor(object):
                 lambda_v1 = seeds[2]  #same_share
                 mv = torch.zeros_like(lambda_v1)
                 #recive mv from 2
+                req1 = comm.get().irecv(mv, src=2)
+                req1.wait()
+
+
                 self.share = torch.stack([lambda_v1, mv])
                 # print("lamdba_v1= ", lambda_v1) 
                 # print("mv= ", mv)
             if process_num == 2:
                 lambda_v2 = seeds[1]  #next_share
-                mv = tensor + lambda_v2 + seeds[2]  #same_share
+                mv = tensor ^ lambda_v2 ^ seeds[2]  #same_share
                 #send mv to 1
+                req1 = comm.get().isend(mv, dst=1)
                 self.share = torch.stack([lambda_v2, mv])
                 # print("lamdba_v2= ", lambda_v2)
                 # print("mv= ", mv)
@@ -435,7 +449,7 @@ class AstraBSharedTensor(object):
                 missing_value =torch.zeros_like(tensor[0])
                 req1 = comm.get().irecv(missing_value, src=1)
                 req1.wait()
-                return missing_value-tensor[0]-tensor[1]
+                return missing_value^tensor[0]^tensor[1]
             elif process_num == 1:
                 # recieving lamda_v2 from 0
                 missing_value =torch.zeros_like(tensor[0])
@@ -444,7 +458,7 @@ class AstraBSharedTensor(object):
                 # sending mv to 0
                 req2 = comm.get().isend(tensor[1], dst=0)
                 req2.wait()
-                return tensor[1]-tensor[0]-missing_value
+                return tensor[1]^tensor[0]^missing_value
         
         # Parties p0 and p2 come together
         elif dst=='02' or dst=='20':
@@ -456,7 +470,7 @@ class AstraBSharedTensor(object):
                 missing_value =torch.zeros_like(tensor[0])
                 req1 = comm.get().irecv(missing_value, src=2)
                 req1.wait()
-                return missing_value-tensor[0]-tensor[1]
+                return missing_value^tensor[0]^tensor[1]
             elif process_num == 2:
                 # recieving lamda_v1 from 0
                 missing_value =torch.zeros_like(tensor[0])
@@ -465,7 +479,7 @@ class AstraBSharedTensor(object):
                 # sending mv to 0
                 req2 = comm.get().isend(tensor[1], dst=0)
                 req2.wait()
-                return tensor[1]-tensor[0]-missing_value
+                return tensor[1]^tensor[0]^missing_value
 
         # Parties p1 and p2 come together
         elif dst=='12' or dst=='21':
@@ -477,7 +491,7 @@ class AstraBSharedTensor(object):
                 missing_value =torch.zeros_like(tensor[0])
                 req1 = comm.get().irecv(missing_value, src=2)
                 req1.wait()
-                return tensor[1]-tensor[0]-missing_value
+                return tensor[1]^tensor[0]^missing_value
             elif process_num == 2:
                 # recieving lamda_v1 from 1
                 missing_value =torch.zeros_like(tensor[0])
@@ -486,7 +500,7 @@ class AstraBSharedTensor(object):
                 # sending lamda_v2 from 2
                 req2 = comm.get().isend(tensor[0], dst=1)
                 req2.wait()
-                return tensor[1]-tensor[0]-missing_value
+                return tensor[1]^tensor[0]^missing_value
 
     
         # If all process come together
@@ -502,7 +516,7 @@ class AstraBSharedTensor(object):
                 #sending lamda_v1 to 2
                 req00 = comm.get().isend(tensor[0], dst=2)
                 req00.wait()
-                return missing_value-tensor[0]-tensor[1]
+                return missing_value^tensor[0]^tensor[1]
             elif process_num == 1:
                 
                 missing_value =torch.zeros_like(tensor[0])
@@ -510,12 +524,13 @@ class AstraBSharedTensor(object):
                 req3.wait()
                 req2 = comm.get().isend(tensor[1], dst=0)
                 req2.wait()
-                return tensor[1]-tensor[0]-missing_value
+                return tensor[1]^tensor[0]^missing_value
             elif process_num == 2:
                 missing_value = torch.zeros_like(tensor[0])
                 req4 = comm.get().irecv(missing_value, src=0)
                 req4.wait()
-                return tensor[1]-tensor[0]-missing_value
+                print("hi")
+                return tensor[1]^tensor[0]^missing_value
     
 
     def get_plain_text(self,dst=None):

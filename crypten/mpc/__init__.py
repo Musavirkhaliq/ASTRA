@@ -25,7 +25,7 @@ __all__ = [
 arithmetic = ptype.arithmetic
 binary = ptype.binary
 astra = ptype.astra
-# astraB = ptype.astraB
+astraB = ptype.astraB
 
 # Set provider
 __SUPPORTED_PROVIDERS = {
